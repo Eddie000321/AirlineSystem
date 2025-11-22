@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Airline Ticketing Portal</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Airline Ticketing Portal</h1>
+      <p>출발지 · 도착지 · 날짜만 넣고 빠르게 좌석을 고르세요.</p>
+    </header>
+
+    <section class="card">
+      <h2>항공편 조회</h2>
+      <div class="form-row">
+        <label>출발지 (예: YYZ)
+          <input id="from" maxlength="3" value="YYZ" />
+        </label>
+        <label>도착지 (예: YVR)
+          <input id="to" maxlength="3" value="YVR" />
+        </label>
+        <label>날짜
+          <input id="date" type="date" />
+        </label>
+        <button id="searchBtn">조회</button>
+      </div>
+      <div id="flights"></div>
+    </section>
+
+    <section class="card" id="seatSection">
+      <h2>좌석 선택</h2>
+      <div id="selectedFlight" class="info-line">항공편을 먼저 선택하세요.</div>
+      <div id="cabinTabs" class="tabs"></div>
+      <div id="seatLegend">
+        <span class="legend available">선택 가능</span>
+        <span class="legend taken">예약됨</span>
+        <span class="legend exit">출구 좌석</span>
+        <span class="legend extra">Legroom+</span>
+      </div>
+      <div id="seatMap" class="seat-map"></div>
+    </section>
+
+    <section class="card">
+      <h2>예약 / 발권</h2>
+      <div class="form-row">
+        <label>승객 이름
+          <input id="passengerName" placeholder="홍길동" />
+        </label>
+        <label>연락처 (이메일/휴대폰)
+          <input id="passengerContact" placeholder="010-0000-0000" />
+        </label>
+      </div>
+      <button id="bookBtn" class="primary">예약하기</button>
+      <div id="bookingResult" class="info-line"></div>
+    </section>
+
+    <section class="card">
+      <h2>예약 조회 / 수정</h2>
+      <div class="form-row">
+        <label>PNR 코드
+          <input id="pnrLookup" maxlength="6" placeholder="ABC123" />
+        </label>
+        <button id="lookupBtn">조회</button>
+      </div>
+      <div id="managePanel" class="manage-panel hidden">
+        <div id="bookingSummary"></div>
+        <div class="form-row">
+          <label>새 좌석
+            <input id="newSeat" maxlength="4" placeholder="12A" />
+          </label>
+          <button id="changeSeatBtn">좌석 변경</button>
+          <button id="cancelBtn" class="danger">예약 취소</button>
+        </div>
+        <div id="manageResult" class="info-line"></div>
+      </div>
+    </section>
+
+    <footer>
+      <small>COMP214 Airline Team · Oracle 12c 백엔드 + 단일 페이지 프런트</small>
+    </footer>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,228 @@
+:root {
+  color-scheme: light;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  --primary: #0b4f9c;
+  --muted: #6d7a8c;
+  --bg: #f5f7fb;
+  --card: #fff;
+  --border: #dbe2f1;
+  --danger: #b00020;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--bg);
+  color: #111;
+}
+
+header {
+  margin-bottom: 16px;
+}
+
+header h1 {
+  margin: 0 0 6px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08);
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+label {
+  flex: 1;
+  color: var(--muted);
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 1rem;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 1rem;
+  cursor: pointer;
+  background: var(--primary);
+  color: #fff;
+  transition: transform 0.1s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+button.primary {
+  font-weight: 600;
+}
+
+#flights .flight-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flight-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.95rem;
+}
+
+.fare-buttons button {
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+.info-line {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.tabs {
+  margin: 8px 0;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tabs button {
+  background: #dfe8f7;
+  color: var(--primary);
+}
+
+.tabs button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.seat-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.seat {
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  padding: 10px 0;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #fff;
+}
+
+.seat.taken {
+  border-color: #bbb;
+  color: #bbb;
+  cursor: not-allowed;
+}
+
+.seat.selected {
+  background: var(--primary);
+  color: #fff;
+}
+
+.seat.exit {
+  border-style: dashed;
+}
+
+.seat.extra {
+  box-shadow: inset 0 0 0 2px #1abc9c;
+}
+
+.seatLegend {
+  margin-top: 8px;
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 8px;
+  margin-right: 8px;
+  background: #eef3fb;
+  color: #334155;
+  font-size: 0.85rem;
+}
+
+.legend.available::before,
+.legend.taken::before,
+.legend.exit::before,
+.legend.extra::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  margin-right: 6px;
+}
+
+.legend.available::before {
+  background: var(--primary);
+}
+
+.legend.taken::before {
+  background: #bbb;
+}
+
+.legend.exit::before {
+  background: #f97316;
+}
+
+.legend.extra::before {
+  background: #1abc9c;
+}
+
+.manage-panel.hidden {
+  display: none;
+}
+
+footer {
+  text-align: center;
+  color: var(--muted);
+  margin-top: 24px;
+}
+
+@media (max-width: 720px) {
+  body {
+    padding: 16px;
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
+}

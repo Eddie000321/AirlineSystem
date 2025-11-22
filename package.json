@@ -1,0 +1,24 @@
+{
+  "name": "airlinesystem",
+  "version": "1.0.0",
+  "description": "Oracle-backed airline booking prototype (front-end + API)",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "NODE_ENV=production node src/server.js",
+    "lint": "echo \"Add your preferred linter\" && exit 0",
+    "test": "echo \"No automated tests configured\" && exit 0"
+  },
+  "keywords": [],
+  "author": "COMP214 Airline Team",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.19.2",
+    "joi": "^17.12.3",
+    "morgan": "^1.10.0",
+    "oracledb": "^6.4.0"
+  }
+}
