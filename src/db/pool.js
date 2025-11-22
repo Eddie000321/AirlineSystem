@@ -4,6 +4,11 @@ const config = require('../config/env');
 let pool;
 
 function buildConnectString() {
+  // Explicit full connect string if provided
+  if (process.env.ORACLE_CONNECT_STRING) {
+    return process.env.ORACLE_CONNECT_STRING;
+  }
+
   if (config.oracle.ezConnectService) {
     return config.oracle.ezConnectService;
   }
@@ -19,7 +24,7 @@ function buildConnectString() {
   if (config.oracle.sid) {
     return `(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=${host})(PORT=${port}))(CONNECT_DATA=(SID=${config.oracle.sid})))`;
   }
-  throw new Error('Missing Oracle service name or SID in environment variables.');
+  throw new Error('Missing Oracle connection settings. Set ORACLE_EZCONNECT_SERVICE (e.g. //host:1521/service) or ORACLE_HOST/PORT plus ORACLE_SERVICE_NAME.');
 }
 
 async function initPool() {
