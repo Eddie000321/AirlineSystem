@@ -5,12 +5,12 @@ Full-stack sample for COMP214 term project. Oracle 12c provides the back-end dat
 ## Quick start
 
 ```bash
-cp .env .env.local # or fill .env directly with Oracle credentials
-npm install        # install dependencies
-npm run dev        # start API + static UI (http://localhost:3000)
+cp .env.sample .env   # fill in Oracle host/user/password/SID or service
+npm install           # install dependencies
+npm run dev           # start API + static UI (http://localhost:3000)
 ```
 
-Update `.env` with your Oracle server info (host/port/service/SID + credentials). The API needs a reachable Oracle instance containing the schema from `sql/setup.sql`.
+Update `.env` with your Oracle server info (host/port/service/SID + credentials). The API needs a reachable Oracle instance containing the schema from `sql/setup.sql`. If you are sharing the project, commit only `.env.sample`; teammates can copy it to `.env` and fill their own credentials.
 
 ## Project layout
 
