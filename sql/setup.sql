@@ -227,6 +227,32 @@ VALUES (1, 'AC105', TO_TIMESTAMP('2024-05-21 16:00', 'YYYY-MM-DD HH24:MI'), TO_T
 INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
 VALUES (2, 'AC410', TO_TIMESTAMP('2024-05-21 09:30', 'YYYY-MM-DD HH24:MI'), TO_TIMESTAMP('2024-05-21 10:42', 'YYYY-MM-DD HH24:MI'), 2, 'SCHEDULED');
 
+PROMPT Adding dynamic-dated flights (today and next 2 days)...
+
+DECLARE
+  v_base TIMESTAMP := CAST(TRUNC(SYSDATE) AS TIMESTAMP);
+BEGIN
+  -- Today YYZ->YVR
+  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
+  VALUES (1, 'AC201', v_base + (8/24), v_base + (10.5/24), 1, 'SCHEDULED');
+
+  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
+  VALUES (1, 'AC203', v_base + (15/24), v_base + (17.5/24), 1, 'SCHEDULED');
+
+  -- Tomorrow YYZ->YVR
+  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
+  VALUES (1, 'AC205', v_base + 1 + (9/24), v_base + 1 + (11.5/24), 1, 'SCHEDULED');
+
+  -- Today YYZ->YUL
+  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
+  VALUES (2, 'AC411', v_base + (7.5/24), v_base + (8.7/24), 2, 'SCHEDULED');
+
+  -- Tomorrow YYZ->YUL
+  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
+  VALUES (2, 'AC413', v_base + 1 + (18/24), v_base + 1 + (19.2/24), 2, 'SCHEDULED');
+END;
+/
+
 PROMPT Generating seat layout per flight...
 
 DECLARE
@@ -278,6 +304,34 @@ VALUES (seq_booking.NEXTVAL, 1000, 1, 'A1B2C3', 'CONFIRMED', 'Y');
 
 INSERT INTO ticket(ticket_id, booking_id, flight_id, seat_no, cabin_class, fare_amount, status)
 VALUES (seq_ticket.NEXTVAL, 2000, 1, '28A', 'ECONOMY', 320, 'ACTIVE');
+
+PROMPT Additional sample bookings for today/tomorrow flights...
+DECLARE
+  PROCEDURE add_booking(p_name VARCHAR2, p_contact VARCHAR2, p_flight_id NUMBER, p_seat VARCHAR2, p_cabin VARCHAR2, p_fare NUMBER) IS
+    v_pnr booking.pnr_code%TYPE;
+  BEGIN
+    v_pnr := DBMS_RANDOM.STRING('A', 3) || LPAD(TO_CHAR(DBMS_RANDOM.VALUE(0, 999)), 3, '0');
+
+    INSERT INTO customer(customer_id, full_name, contact_info)
+    VALUES (seq_customer.NEXTVAL, p_name, p_contact);
+
+    INSERT INTO booking(booking_id, customer_id, flight_id, pnr_code, status, paid_flag)
+    VALUES (seq_booking.NEXTVAL, seq_customer.CURRVAL, p_flight_id, v_pnr, 'CONFIRMED', 'Y');
+
+    INSERT INTO ticket(ticket_id, booking_id, flight_id, seat_no, cabin_class, fare_amount, status)
+    VALUES (seq_ticket.NEXTVAL, seq_booking.CURRVAL, p_flight_id, p_seat, p_cabin, p_fare, 'ACTIVE');
+  END;
+BEGIN
+  -- Use actual flight IDs based on insertion order: first 3 static, then dynamic block (today/tomorrow)
+  -- Assuming dynamic YYZ-YVR flights got IDs 4,5,6 and YYZ-YUL 7,8 respectively.
+  add_booking('Today Demo Econ', 'today@demo.com', 4, '28B', 'ECONOMY', 320);
+  add_booking('Today Demo Biz', 'biz@demo.com', 4, '07A', 'BUSINESS', 980);
+  add_booking('Today Demo First', 'first@demo.com', 5, '01A', 'FIRST', 1600);
+  add_booking('Tomorrow Demo Econ', 'tomorrow@demo.com', 6, '28C', 'ECONOMY', 320);
+  add_booking('Today YUL Econ', 'yul@demo.com', 7, '28A', 'ECONOMY', 180);
+  add_booking('Tomorrow YUL Biz', 'yulbiz@demo.com', 8, '07D', 'BUSINESS', 620);
+END;
+/
 
 COMMIT;
 

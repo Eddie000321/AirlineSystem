@@ -39,9 +39,9 @@ document.getElementById('cancelBtn').addEventListener('click', () => {
 });
 
 async function searchFlights() {
-  flightsEl.textContent = '검색 중...';
+  flightsEl.textContent = 'Searching...';
   seatMapEl.innerHTML = '';
-  selectedFlightEl.textContent = '좌석을 보기 위해 항공편을 선택하세요.';
+  selectedFlightEl.textContent = 'Select a flight to view seats.';
   state.selectedFlight = null;
   state.selectedSeat = null;
   bookingResultEl.textContent = '';
@@ -57,7 +57,7 @@ async function searchFlights() {
     if (!res.ok) throw new Error('항공편 조회 실패');
     state.flights = await res.json();
     if (state.flights.length === 0) {
-      flightsEl.textContent = '조건에 맞는 항공편이 없습니다.';
+      flightsEl.textContent = 'No flights found for that day.';
       return;
     }
     flightsEl.innerHTML = state.flights
@@ -70,14 +70,14 @@ async function searchFlights() {
           <span>${flight.departureCode} → ${flight.arrivalCode}</span>
         </div>
         <div class="fare-buttons">
-          <button data-flight="${flight.flightId}" data-cabin="ECONOMY" data-label="이코노미">
-            이코노미 ${flight.economyFare} (${flight.economyRemaining}석)
+          <button data-flight="${flight.flightId}" data-cabin="ECONOMY" data-label="Economy">
+            Economy ${flight.economyFare} (${flight.economyRemaining} left)
           </button>
-          <button data-flight="${flight.flightId}" data-cabin="BUSINESS" data-label="비즈니스">
-            비즈니스 ${flight.businessFare} (${flight.businessRemaining}석)
+          <button data-flight="${flight.flightId}" data-cabin="BUSINESS" data-label="Business">
+            Business ${flight.businessFare} (${flight.businessRemaining} left)
           </button>
-          <button data-flight="${flight.flightId}" data-cabin="FIRST" data-label="퍼스트">
-            퍼스트 ${flight.firstFare} (${flight.firstRemaining}석)
+          <button data-flight="${flight.flightId}" data-cabin="FIRST" data-label="First">
+            First ${flight.firstFare} (${flight.firstRemaining} left)
           </button>
         </div>
       </div>`
@@ -96,7 +96,7 @@ async function searchFlights() {
 function selectFlight(flightId, cabin, label) {
   state.selectedFlight = flightId;
   state.selectedCabin = cabin;
-  selectedFlightEl.textContent = `선택: ${flightId} (${label})`;
+  selectedFlightEl.textContent = `Selected: ${flightId} (${label})`;
   renderCabinTabs();
   loadSeats();
 }
@@ -121,7 +121,7 @@ function renderCabinTabs() {
 
 async function loadSeats() {
   if (!state.selectedFlight || !state.selectedCabin) return;
-  seatMapEl.textContent = '좌석 불러오는 중...';
+  seatMapEl.textContent = 'Loading seats...';
   try {
     const params = new URLSearchParams({
       flightId: state.selectedFlight,
@@ -138,7 +138,7 @@ async function loadSeats() {
 
 function renderSeatMap() {
   if (!state.seats.length) {
-    seatMapEl.textContent = '좌석 정보가 없습니다.';
+    seatMapEl.textContent = 'No seat data.';
     return;
   }
   seatMapEl.innerHTML = state.seats
@@ -161,7 +161,7 @@ function renderSeatMap() {
 
 async function createBooking() {
   if (!state.selectedFlight || !state.selectedSeat) {
-    bookingResultEl.textContent = '항공편과 좌석을 먼저 선택하세요.';
+    bookingResultEl.textContent = 'Select a flight and seat first.';
     return;
   }
   const payload = {
@@ -179,10 +179,10 @@ async function createBooking() {
     });
     if (!res.ok) {
       const errBody = await res.json();
-      throw new Error(errBody.error || '예약 실패');
+      throw new Error(errBody.error || 'Booking failed');
     }
     const data = await res.json();
-    bookingResultEl.textContent = `PNR ${data.pnr} / 티켓 ${data.ticketNumber} 발권 완료`;
+    bookingResultEl.textContent = `Issued. PNR ${data.pnr} / Ticket ${data.ticketNumber}`;
     state.currentPnr = data.pnr;
     document.getElementById('pnrLookup').value = data.pnr;
     loadSeats();
@@ -194,12 +194,12 @@ async function createBooking() {
 async function lookupBooking() {
   const pnr = document.getElementById('pnrLookup').value.trim();
   if (!pnr) return;
-  manageResultEl.textContent = '조회 중...';
+  manageResultEl.textContent = 'Looking up...';
   try {
     const res = await fetch(`/api/bookings/${pnr}`);
     if (!res.ok) {
       const body = await res.json();
-      throw new Error(body.error || '예약을 찾을 수 없습니다.');
+      throw new Error(body.error || 'Booking not found.');
     }
     const data = await res.json();
     state.currentPnr = data.pnr;
@@ -219,7 +219,7 @@ async function changeSeat() {
   if (!state.currentPnr) return;
   const seatNo = document.getElementById('newSeat').value.trim();
   if (!seatNo) return;
-  manageResultEl.textContent = '좌석 변경 중...';
+    manageResultEl.textContent = 'Changing seat...';
   try {
     const res = await fetch(`/api/bookings/${state.currentPnr}/seat`, {
       method: 'PUT',
@@ -228,10 +228,10 @@ async function changeSeat() {
     });
     if (!res.ok) {
       const body = await res.json();
-      throw new Error(body.error || '좌석 변경 실패');
+      throw new Error(body.error || 'Seat change failed');
     }
     await res.json();
-    manageResultEl.textContent = `좌석이 ${seatNo}로 변경되었습니다.`;
+    manageResultEl.textContent = `Seat changed to ${seatNo}.`;
     lookupBooking();
   } catch (err) {
     manageResultEl.textContent = err.message;
@@ -240,15 +240,15 @@ async function changeSeat() {
 
 async function cancelBooking() {
   if (!state.currentPnr) return;
-  if (!confirm('정말 예약을 취소할까요?')) return;
-  manageResultEl.textContent = '취소 처리 중...';
+  if (!confirm('Cancel this booking?')) return;
+  manageResultEl.textContent = 'Cancelling...';
   try {
     const res = await fetch(`/api/bookings/${state.currentPnr}`, { method: 'DELETE' });
     if (!res.ok) {
       const body = await res.json();
-      throw new Error(body.error || '취소 실패');
+      throw new Error(body.error || 'Cancel failed');
     }
-    manageResultEl.textContent = '예약이 취소되었습니다.';
+    manageResultEl.textContent = 'Booking cancelled.';
     managePanelEl.classList.add('hidden');
     state.currentPnr = null;
   } catch (err) {
