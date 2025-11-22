@@ -14,13 +14,12 @@ async function getSeats({ flightId, cabin }) {
         s.is_exit_row,
         s.is_wheelchair,
         s.is_extra_legroom,
-        NVL(t.status, 'AVAILABLE') AS seat_status
+        CASE WHEN t.seat_no IS NULL THEN 'AVAILABLE' ELSE 'TAKEN' END AS seat_status
       FROM seat_layout s
-      LEFT JOIN (
-        SELECT flight_id, seat_no, 'TAKEN' AS status
-        FROM ticket
-        WHERE status = 'ACTIVE'
-      ) t ON t.flight_id = s.flight_id AND t.seat_no = s.seat_no
+      LEFT JOIN ticket t
+        ON t.flight_id = s.flight_id
+       AND t.seat_no = s.seat_no
+       AND t.status = 'ACTIVE'
       WHERE s.flight_id = :flightId
         AND s.cabin_class = :cabin
       ORDER BY s.seat_row, s.seat_col`;

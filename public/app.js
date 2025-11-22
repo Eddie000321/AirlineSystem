@@ -1,3 +1,5 @@
+const API_BASE = window.API_BASE || 'http://localhost:3000';
+
 const flightsEl = document.getElementById('flights');
 const seatMapEl = document.getElementById('seatMap');
 const selectedFlightEl = document.getElementById('selectedFlight');
@@ -6,6 +8,19 @@ const bookingResultEl = document.getElementById('bookingResult');
 const managePanelEl = document.getElementById('managePanel');
 const bookingSummaryEl = document.getElementById('bookingSummary');
 const manageResultEl = document.getElementById('manageResult');
+const manageSeatMapEl = document.getElementById('manageSeatMap');
+const fromSelect = document.getElementById('from');
+const toSelect = document.getElementById('to');
+
+const dateInput = document.getElementById('date');
+
+const airports = [
+  { code: 'YYZ', name: 'Toronto Pearson' },
+  { code: 'YVR', name: 'Vancouver Intl' },
+  { code: 'YUL', name: 'Montreal Trudeau' },
+  { code: 'LAX', name: 'Los Angeles Intl' },
+  { code: 'JFK', name: 'New York JFK' }
+];
 
 const state = {
   flights: [],
@@ -13,10 +28,30 @@ const state = {
   selectedCabin: null,
   seats: [],
   selectedSeat: null,
-  currentPnr: null
+  currentPnr: null,
+  manageSeats: [],
+  manageFlightId: null,
+  manageCabin: null,
+  manageSelectedSeat: null
 };
 
-document.getElementById('date').value = new Date().toISOString().slice(0, 10);
+const todayStr = new Date().toISOString().slice(0, 10);
+const maxDate = new Date();
+maxDate.setDate(maxDate.getDate() + 30);
+const maxDateStr = maxDate.toISOString().slice(0, 10);
+dateInput.value = todayStr;
+dateInput.min = todayStr;
+dateInput.max = maxDateStr;
+
+function populateAirportSelect(selectEl, defaultCode) {
+  selectEl.innerHTML = airports
+    .map((a) => `<option value="${a.code}">${a.code} — ${a.name}</option>`)
+    .join('');
+  selectEl.value = defaultCode || airports[0].code;
+}
+
+populateAirportSelect(fromSelect, 'YYZ');
+populateAirportSelect(toSelect, 'YVR');
 
 document.getElementById('searchBtn').addEventListener('click', () => {
   searchFlights();
@@ -53,8 +88,8 @@ async function searchFlights() {
   });
 
   try {
-    const res = await fetch(`/api/flights?${params.toString()}`);
-    if (!res.ok) throw new Error('항공편 조회 실패');
+    const res = await fetch(`${API_BASE}/api/flights?${params.toString()}`);
+    if (!res.ok) throw new Error('Flight search failed');
     state.flights = await res.json();
     if (state.flights.length === 0) {
       flightsEl.textContent = 'No flights found for that day.';
@@ -127,8 +162,8 @@ async function loadSeats() {
       flightId: state.selectedFlight,
       cabin: state.selectedCabin
     });
-    const res = await fetch(`/api/seats?${params.toString()}`);
-    if (!res.ok) throw new Error('좌석 조회 실패');
+    const res = await fetch(`${API_BASE}/api/seats?${params.toString()}`);
+    if (!res.ok) throw new Error('Seat lookup failed');
     state.seats = await res.json();
     renderSeatMap();
   } catch (err) {
@@ -141,20 +176,119 @@ function renderSeatMap() {
     seatMapEl.textContent = 'No seat data.';
     return;
   }
-  seatMapEl.innerHTML = state.seats
-    .map(
-      (seat) => `<div class="seat ${seat.status !== 'AVAILABLE' ? 'taken' : ''} ${seat.isExit ? 'exit' : ''} ${
-        seat.isExtraLegroom ? 'extra' : ''
-      } ${state.selectedSeat === seat.seatNo ? 'selected' : ''}" data-seat="${seat.seatNo}" data-status="${seat.status}">
-        ${seat.seatNo}
-      </div>`
-    )
-    .join('');
+
+  const layout = getCabinLayout(state.selectedCabin);
+  const rows = [...new Set(state.seats.map((s) => s.row))].sort((a, b) => a - b);
+  const byRow = rows.map((row) => {
+    const seatsInRow = state.seats.filter((s) => s.row === row);
+    const groupsHtml = layout
+      .map((group) => {
+        const seatsHtml = group
+          .map((label) => {
+            const seat = seatsInRow.find((s) => s.seatNo === `${row}${label}`);
+            if (!seat) {
+              return '';
+            }
+            return `<div class="seat ${seat.status !== 'AVAILABLE' ? 'taken' : ''} ${seat.isExit ? 'exit' : ''} ${
+              seat.isExtraLegroom ? 'extra' : ''
+            } ${state.selectedSeat === seat.seatNo ? 'selected' : ''}" data-seat="${seat.seatNo}" data-status="${seat.status}">
+              ${seat.seatNo}
+            </div>`;
+          })
+          .join('');
+        return `<div class="seat-group">${seatsHtml}</div>`;
+      })
+      .join('');
+
+    return `<div class="seat-row">
+      <div class="row-label">${row}</div>
+      <div class="seat-groups">${groupsHtml}</div>
+    </div>`;
+  });
+
+  seatMapEl.innerHTML = `<div class="seat-map-inner">${byRow.join('')}</div>`;
+
   seatMapEl.querySelectorAll('.seat').forEach((el) => {
     el.addEventListener('click', () => {
       if (el.dataset.status !== 'AVAILABLE') return;
       state.selectedSeat = el.dataset.seat;
       renderSeatMap();
+    });
+  });
+}
+
+function getCabinLayout(cabin) {
+  if (cabin === 'FIRST') {
+    return [['A'], ['D', 'G'], ['J']]; // 1-2-1 feel
+  }
+  if (cabin === 'BUSINESS') {
+    return [['A', 'D'], ['G', 'J']]; // 2-2-2
+  }
+  // ECONOMY
+  return [['A', 'B', 'C'], ['D', 'E', 'F'], ['G', 'H', 'J']]; // 3-3-3
+}
+
+async function loadManageSeats() {
+  if (!state.manageFlightId || !state.manageCabin) {
+    manageSeatMapEl.innerHTML = '';
+    return;
+  }
+  manageSeatMapEl.textContent = 'Loading seats...';
+  try {
+    const params = new URLSearchParams({
+      flightId: state.manageFlightId,
+      cabin: state.manageCabin
+    });
+    const res = await fetch(`${API_BASE}/api/seats?${params.toString()}`);
+    if (!res.ok) throw new Error('Seat lookup failed');
+    state.manageSeats = await res.json();
+    renderManageSeatMap();
+  } catch (err) {
+    manageSeatMapEl.textContent = err.message;
+  }
+}
+
+function renderManageSeatMap() {
+  if (!state.manageSeats.length) {
+    manageSeatMapEl.textContent = 'No seat data.';
+    return;
+  }
+
+  const layout = getCabinLayout(state.manageCabin);
+  const rows = [...new Set(state.manageSeats.map((s) => s.row))].sort((a, b) => a - b);
+  const byRow = rows.map((row) => {
+    const seatsInRow = state.manageSeats.filter((s) => s.row === row);
+    const groupsHtml = layout
+      .map((group) => {
+        const seatsHtml = group
+          .map((label) => {
+            const seat = seatsInRow.find((s) => s.seatNo === `${row}${label}`);
+            if (!seat) return '';
+            return `<div class="seat ${seat.status !== 'AVAILABLE' ? 'taken' : ''} ${seat.isExit ? 'exit' : ''} ${
+              seat.isExtraLegroom ? 'extra' : ''
+            } ${state.manageSelectedSeat === seat.seatNo ? 'selected' : ''}" data-seat="${seat.seatNo}" data-status="${seat.status}">
+              ${seat.seatNo}
+            </div>`;
+          })
+          .join('');
+        return `<div class="seat-group">${seatsHtml}</div>`;
+      })
+      .join('');
+
+    return `<div class="seat-row">
+      <div class="row-label">${row}</div>
+      <div class="seat-groups">${groupsHtml}</div>
+    </div>`;
+  });
+
+  manageSeatMapEl.innerHTML = `<div class="seat-map-inner">${byRow.join('')}</div>`;
+
+  manageSeatMapEl.querySelectorAll('.seat').forEach((el) => {
+    el.addEventListener('click', () => {
+      if (el.dataset.status !== 'AVAILABLE') return;
+      state.manageSelectedSeat = el.dataset.seat;
+      document.getElementById('newSeat').value = el.dataset.seat;
+      renderManageSeatMap();
     });
   });
 }
@@ -172,7 +306,7 @@ async function createBooking() {
     passengerContact: document.getElementById('passengerContact').value.trim()
   };
   try {
-    const res = await fetch('/api/bookings', {
+    const res = await fetch(`${API_BASE}/api/bookings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -196,7 +330,7 @@ async function lookupBooking() {
   if (!pnr) return;
   manageResultEl.textContent = 'Looking up...';
   try {
-    const res = await fetch(`/api/bookings/${pnr}`);
+    const res = await fetch(`${API_BASE}/api/bookings/${pnr}`);
     if (!res.ok) {
       const body = await res.json();
       throw new Error(body.error || 'Booking not found.');
@@ -204,11 +338,15 @@ async function lookupBooking() {
     const data = await res.json();
     state.currentPnr = data.pnr;
     managePanelEl.classList.remove('hidden');
+    state.manageFlightId = data.flight.id;
+    state.manageCabin = data.ticket.cabin;
+    state.manageSelectedSeat = data.ticket.seatNo;
     bookingSummaryEl.innerHTML = `
       <p><strong>${data.flight.number}</strong> | ${data.flight.departure} → ${data.flight.arrival}</p>
-      <p>${data.passenger.name} · 좌석 ${data.ticket.seatNo} (${data.ticket.cabin})</p>
-      <p>상태: ${data.status}</p>`;
+      <p>${data.passenger.name} · Seat ${data.ticket.seatNo} (${data.ticket.cabin})</p>
+      <p>Status: ${data.status}</p>`;
     manageResultEl.textContent = '';
+    loadManageSeats();
   } catch (err) {
     managePanelEl.classList.add('hidden');
     manageResultEl.textContent = err.message;
@@ -221,7 +359,7 @@ async function changeSeat() {
   if (!seatNo) return;
     manageResultEl.textContent = 'Changing seat...';
   try {
-    const res = await fetch(`/api/bookings/${state.currentPnr}/seat`, {
+    const res = await fetch(`${API_BASE}/api/bookings/${state.currentPnr}/seat`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seatNo })
@@ -243,7 +381,7 @@ async function cancelBooking() {
   if (!confirm('Cancel this booking?')) return;
   manageResultEl.textContent = 'Cancelling...';
   try {
-    const res = await fetch(`/api/bookings/${state.currentPnr}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/api/bookings/${state.currentPnr}`, { method: 'DELETE' });
     if (!res.ok) {
       const body = await res.json();
       throw new Error(body.error || 'Cancel failed');

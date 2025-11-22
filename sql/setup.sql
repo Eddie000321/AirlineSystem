@@ -4,19 +4,46 @@
 
 SET DEFINE OFF;
 
-PROMPT Dropping old objects (ignoring errors)...
-BEGIN
-  FOR rec IN (SELECT object_name, object_type
-              FROM user_objects
-              WHERE object_type IN ('TABLE', 'SEQUENCE', 'PACKAGE', 'PACKAGE BODY', 'FUNCTION', 'PROCEDURE', 'VIEW', 'TRIGGER'))
-  LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'DROP ' || rec.object_type || ' "' || rec.object_name || '" CASCADE';
-    EXCEPTION
-      WHEN OTHERS THEN NULL;
-    END;
-  END LOOP;
-END;
+PROMPT Dropping old objects (ignore errors)...
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE ticket_audit CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE payment CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE ticket CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE booking CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE customer CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE seat_layout CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE flight CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE route CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE aircraft CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE airport CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+
+BEGIN EXECUTE IMMEDIATE 'DROP SEQUENCE seq_customer'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP SEQUENCE seq_booking'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP SEQUENCE seq_ticket'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP SEQUENCE seq_payment'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+
+BEGIN EXECUTE IMMEDIATE 'DROP PACKAGE pkg_booking'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP FUNCTION fn_available_seats'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP FUNCTION fn_booking_total'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP PROCEDURE proc_change_seat'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP PROCEDURE proc_cancel_booking'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 
 PROMPT Creating tables...
@@ -205,8 +232,6 @@ VALUES ('JFK', 'John F. Kennedy', 'New York', 'USA');
 
 INSERT INTO aircraft(model, tail_number, total_seats)
 VALUES ('Boeing 787-9', 'C-ABC1', 290);
-INSERT INTO aircraft(model, tail_number, total_seats)
-VALUES ('Airbus A321', 'C-XYZ2', 190);
 
 INSERT INTO route(departure_airport_id, arrival_airport_id, distance_km, economy_fare, business_fare, first_fare)
 SELECT dep.airport_id, arr.airport_id, 3358, 320, 980, 1600
@@ -225,37 +250,40 @@ INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_i
 VALUES (1, 'AC105', TO_TIMESTAMP('2024-05-21 16:00', 'YYYY-MM-DD HH24:MI'), TO_TIMESTAMP('2024-05-21 18:15', 'YYYY-MM-DD HH24:MI'), 1, 'SCHEDULED');
 
 INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-VALUES (2, 'AC410', TO_TIMESTAMP('2024-05-21 09:30', 'YYYY-MM-DD HH24:MI'), TO_TIMESTAMP('2024-05-21 10:42', 'YYYY-MM-DD HH24:MI'), 2, 'SCHEDULED');
+VALUES (2, 'AC410', TO_TIMESTAMP('2024-05-21 09:30', 'YYYY-MM-DD HH24:MI'), TO_TIMESTAMP('2024-05-21 10:42', 'YYYY-MM-DD HH24:MI'), 1, 'SCHEDULED');
 
-PROMPT Adding dynamic-dated flights (today and next 2 days)...
+PROMPT Adding dynamic-dated YYZ -> YVR flights for today through +30 days (2 per day)...
 
 DECLARE
   v_base TIMESTAMP := CAST(TRUNC(SYSDATE) AS TIMESTAMP);
+  v_day  PLS_INTEGER;
 BEGIN
-  -- Today YYZ->YVR
-  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-  VALUES (1, 'AC201', v_base + (8/24), v_base + (10.5/24), 1, 'SCHEDULED');
+  FOR v_day IN 0 .. 30 LOOP
+    -- Morning departure
+    INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
+    VALUES (1,
+            'AC2' || TO_CHAR(v_day, 'FM00') || 'M',
+            v_base + v_day + (8/24),
+            v_base + v_day + (10.5/24),
+            1,
+            'SCHEDULED');
 
-  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-  VALUES (1, 'AC203', v_base + (15/24), v_base + (17.5/24), 1, 'SCHEDULED');
-
-  -- Tomorrow YYZ->YVR
-  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-  VALUES (1, 'AC205', v_base + 1 + (9/24), v_base + 1 + (11.5/24), 1, 'SCHEDULED');
-
-  -- Today YYZ->YUL
-  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-  VALUES (2, 'AC411', v_base + (7.5/24), v_base + (8.7/24), 2, 'SCHEDULED');
-
-  -- Tomorrow YYZ->YUL
-  INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-  VALUES (2, 'AC413', v_base + 1 + (18/24), v_base + 1 + (19.2/24), 2, 'SCHEDULED');
+    -- Afternoon departure
+    INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
+    VALUES (1,
+            'AC2' || TO_CHAR(v_day, 'FM00') || 'A',
+            v_base + v_day + (15/24),
+            v_base + v_day + (17.5/24),
+            1,
+            'SCHEDULED');
+  END LOOP;
 END;
 /
 
 PROMPT Generating seat layout per flight...
 
 DECLARE
+  v_labels CONSTANT VARCHAR2(9) := 'ABCDEFGHJ'; -- skip I
   PROCEDURE add_seat(p_flight NUMBER, p_row NUMBER, p_label CHAR, p_cabin VARCHAR2, p_exit CHAR := 'N', p_extra CHAR := 'N') IS
   BEGIN
     INSERT INTO seat_layout(flight_id, cabin_class, seat_row, seat_col, seat_no, is_exit_row, is_extra_legroom)
@@ -273,8 +301,8 @@ BEGIN
 
     -- Economy cabin rows 28-36 seats ABC-DEF-GHJ
     FOR row_num IN 28 .. 36 LOOP
-      FOR seat_label IN ('A','B','C','D','E','F','G','H','J') LOOP
-        add_seat(rec.flight_id, row_num, seat_label, 'ECONOMY',
+      FOR seat_idx IN 1 .. LENGTH(v_labels) LOOP
+        add_seat(rec.flight_id, row_num, SUBSTR(v_labels, seat_idx, 1), 'ECONOMY',
           CASE WHEN row_num IN (28, 36) THEN 'Y' ELSE 'N' END,
           CASE WHEN row_num IN (28, 29) THEN 'Y' ELSE 'N' END);
       END LOOP;
@@ -324,12 +352,24 @@ DECLARE
 BEGIN
   -- Use actual flight IDs based on insertion order: first 3 static, then dynamic block (today/tomorrow)
   -- Assuming dynamic YYZ-YVR flights got IDs 4,5,6 and YYZ-YUL 7,8 respectively.
-  add_booking('Today Demo Econ', 'today@demo.com', 4, '28B', 'ECONOMY', 320);
-  add_booking('Today Demo Biz', 'biz@demo.com', 4, '07A', 'BUSINESS', 980);
-  add_booking('Today Demo First', 'first@demo.com', 5, '01A', 'FIRST', 1600);
-  add_booking('Tomorrow Demo Econ', 'tomorrow@demo.com', 6, '28C', 'ECONOMY', 320);
-  add_booking('Today YUL Econ', 'yul@demo.com', 7, '28A', 'ECONOMY', 180);
-  add_booking('Tomorrow YUL Biz', 'yulbiz@demo.com', 8, '07D', 'BUSINESS', 620);
+  -- earliest two YYZ->YVR flights (today)
+  add_booking('Today Demo Econ', 'today@demo.com',
+    (SELECT flight_id FROM (SELECT flight_id FROM flight WHERE route_id = 1 ORDER BY departure_ts) WHERE ROWNUM = 1),
+    '28B', 'ECONOMY', 320);
+
+  add_booking('Today Demo Biz', 'biz@demo.com',
+    (SELECT flight_id FROM (SELECT flight_id FROM flight WHERE route_id = 1 ORDER BY departure_ts) WHERE ROWNUM = 1),
+    '07A', 'BUSINESS', 980);
+
+  -- first afternoon YYZ->YVR flight today
+  add_booking('Today Demo First', 'first@demo.com',
+    (SELECT flight_id FROM (SELECT flight_id FROM flight WHERE route_id = 1 AND TO_CHAR(departure_ts, 'HH24') >= '12' ORDER BY departure_ts) WHERE ROWNUM = 1),
+    '01A', 'FIRST', 1600);
+
+  -- first YYZ->YVR flight tomorrow
+  add_booking('Tomorrow Demo Econ', 'tomorrow@demo.com',
+    (SELECT flight_id FROM (SELECT flight_id FROM flight WHERE route_id = 1 AND TRUNC(departure_ts) = TRUNC(SYSDATE) + 1 ORDER BY departure_ts) WHERE ROWNUM = 1),
+    '28C', 'ECONOMY', 320);
 END;
 /
 

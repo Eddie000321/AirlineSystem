@@ -1,9 +1,10 @@
 -- Basic smoke tests for the airline schema.
 SET SERVEROUTPUT ON;
 
-PROMPT Available flights YYZ → YVR on 2024-05-21
+PROMPT Available flights YYZ → YVR today .. +30 days
 SELECT f.flight_id,
        f.flight_number,
+       TRUNC(f.departure_ts) AS dep_date,
        TO_CHAR(f.departure_ts, 'HH24:MI') AS depart_time,
        TO_CHAR(f.arrival_ts, 'HH24:MI') AS arrive_time,
        fn_available_seats(f.flight_id, 'ECONOMY') AS econ_left
@@ -13,7 +14,8 @@ JOIN airport dep ON dep.airport_id = r.departure_airport_id
 JOIN airport arr ON arr.airport_id = r.arrival_airport_id
 WHERE dep.airport_code = 'YYZ'
   AND arr.airport_code = 'YVR'
-  AND TRUNC(f.departure_ts) = DATE '2024-05-21';
+  AND TRUNC(f.departure_ts) BETWEEN TRUNC(SYSDATE) AND TRUNC(SYSDATE) + 30
+ORDER BY f.departure_ts;
 
 PROMPT Available flights YYZ → YVR today
 SELECT f.flight_id,
@@ -53,15 +55,18 @@ SELECT fn_available_seats(1, 'ECONOMY') AS econ_left FROM dual;
 PROMPT Seat availability for first YYZ→YVR flight today
 WITH first_flight AS (
   SELECT flight_id
-  FROM flight f
-  JOIN route r ON r.route_id = f.route_id
-  JOIN airport dep ON dep.airport_id = r.departure_airport_id
-  JOIN airport arr ON arr.airport_id = r.arrival_airport_id
-  WHERE dep.airport_code = 'YYZ'
-    AND arr.airport_code = 'YVR'
-    AND TRUNC(f.departure_ts) = TRUNC(SYSDATE)
-  ORDER BY f.departure_ts
-  FETCH FIRST 1 ROW ONLY
+  FROM (
+    SELECT flight_id
+    FROM flight f
+    JOIN route r ON r.route_id = f.route_id
+    JOIN airport dep ON dep.airport_id = r.departure_airport_id
+    JOIN airport arr ON arr.airport_id = r.arrival_airport_id
+    WHERE dep.airport_code = 'YYZ'
+      AND arr.airport_code = 'YVR'
+      AND TRUNC(f.departure_ts) = TRUNC(SYSDATE)
+    ORDER BY f.departure_ts
+  )
+  WHERE ROWNUM = 1
 )
 SELECT fn_available_seats(f.flight_id, 'ECONOMY') AS econ_left_today
 FROM first_flight f;

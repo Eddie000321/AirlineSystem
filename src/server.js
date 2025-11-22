@@ -32,10 +32,25 @@ async function start() {
 
 start();
 
+let shuttingDown = false;
 async function gracefulShutdown(signal) {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
   console.log(`Received ${signal}, closing Oracle pool...`);
-  await closePool();
-  process.exit(0);
+  try {
+    await closePool();
+  } catch (err) {
+    // Ignore pool closing races (e.g., double SIGINT)
+    if (err && err.message && err.message.includes('pool is closing')) {
+      console.warn('Pool already closing, continuing shutdown');
+    } else {
+      console.error('Error during pool close', err);
+    }
+  } finally {
+    process.exit(0);
+  }
 }
 
 process.on('SIGINT', gracefulShutdown);

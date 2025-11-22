@@ -7,79 +7,103 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header>
-      <h1>Airline Ticketing Portal</h1>
-      <p>Search a route, pick seats, and issue a ticket.</p>
-    </header>
-
-    <section class="card">
-      <h2>Flight Search</h2>
-      <div class="form-row">
-        <label>From (e.g. YYZ)
-          <input id="from" maxlength="3" value="YYZ" />
-        </label>
-        <label>To (e.g. YVR)
-          <input id="to" maxlength="3" value="YVR" />
-        </label>
-        <label>Date
-          <input id="date" type="date" />
-        </label>
-        <button id="searchBtn">Search</button>
-      </div>
-      <div id="flights"></div>
-    </section>
-
-    <section class="card" id="seatSection">
-      <h2>Select Seats</h2>
-      <div id="selectedFlight" class="info-line">Choose a flight to view seats.</div>
-      <div id="cabinTabs" class="tabs"></div>
-      <div id="seatLegend">
-        <span class="legend available">Available</span>
-        <span class="legend taken">Taken</span>
-        <span class="legend exit">Exit</span>
-        <span class="legend extra">Legroom+</span>
-      </div>
-      <div id="seatMap" class="seat-map"></div>
-    </section>
-
-    <section class="card">
-      <h2>Book / Issue</h2>
-      <div class="form-row">
-        <label>Passenger Name
-          <input id="passengerName" placeholder="Jane Doe" />
-        </label>
-        <label>Contact (email/phone)
-          <input id="passengerContact" placeholder="email@example.com" />
-        </label>
-      </div>
-      <button id="bookBtn" class="primary">Book & Issue</button>
-      <div id="bookingResult" class="info-line"></div>
-    </section>
-
-    <section class="card">
-      <h2>Manage Booking</h2>
-      <div class="form-row">
-        <label>PNR code
-          <input id="pnrLookup" maxlength="6" placeholder="ABC123" />
-        </label>
-        <button id="lookupBtn">Lookup</button>
-      </div>
-      <div id="managePanel" class="manage-panel hidden">
-        <div id="bookingSummary"></div>
-        <div class="form-row">
-          <label>New seat
-            <input id="newSeat" maxlength="4" placeholder="12A" />
-          </label>
-          <button id="changeSeatBtn">Change Seat</button>
-          <button id="cancelBtn" class="danger">Cancel Booking</button>
+    <div class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Airline Ops · Oracle 12c</p>
+          <h1>Airline Ticketing Portal</h1>
+          <p class="lede">Search routes, pick the perfect seat, and issue tickets in one streamlined flow.</p>
         </div>
-        <div id="manageResult" class="info-line"></div>
-      </div>
-    </section>
+        <div class="hero-badge">
+          <span>Live</span>
+          <strong>Seat Map</strong>
+          <small>Economy · Business · First</small>
+        </div>
+      </header>
 
-    <footer>
-      <small>COMP214 Airline Team · Oracle 12c backend + single-page front end</small>
-    </footer>
+      <main class="layout">
+        <section class="card search">
+          <div class="card-head">
+            <h2>Flight Search</h2>
+            <p>YYZ → YVR routes over the next 30 days.</p>
+          </div>
+          <div class="form-row">
+            <label>From
+              <select id="from"></select>
+            </label>
+            <label>To
+              <select id="to"></select>
+            </label>
+            <label>Date
+              <input id="date" type="date" />
+            </label>
+            <button id="searchBtn" class="primary">Search</button>
+          </div>
+          <div id="flights"></div>
+        </section>
+
+        <section class="card" id="seatSection">
+          <div class="card-head">
+            <h2>Select Seats</h2>
+            <p id="selectedFlight" class="info-line">Choose a flight to view seats.</p>
+          </div>
+          <div id="cabinTabs" class="tabs"></div>
+          <div id="seatLegend">
+            <span class="legend available">Available</span>
+            <span class="legend taken">Taken</span>
+            <span class="legend exit">Exit</span>
+            <span class="legend extra">Legroom+</span>
+          </div>
+          <div id="seatMap" class="seat-map"></div>
+        </section>
+
+        <section class="card book">
+          <div class="card-head">
+            <h2>Book / Issue</h2>
+            <p>Assign the seat to your passenger and generate PNR + ticket.</p>
+          </div>
+          <div class="form-row">
+            <label>Passenger Name
+              <input id="passengerName" placeholder="Jane Doe" />
+            </label>
+            <label>Contact (email/phone)
+              <input id="passengerContact" placeholder="email@example.com" />
+            </label>
+          </div>
+          <button id="bookBtn" class="primary">Book & Issue</button>
+          <div id="bookingResult" class="info-line"></div>
+        </section>
+
+        <section class="card manage">
+          <div class="card-head">
+            <h2>Manage Booking</h2>
+            <p>Lookup by PNR to change seats or cancel.</p>
+          </div>
+          <div class="form-row">
+            <label>PNR code
+              <input id="pnrLookup" maxlength="6" placeholder="ABC123" />
+            </label>
+            <button id="lookupBtn" class="primary">Lookup</button>
+          </div>
+          <div id="managePanel" class="manage-panel hidden">
+            <div id="bookingSummary"></div>
+            <div class="seat-map manage-map" id="manageSeatMap"></div>
+            <div class="form-row">
+              <label>New seat
+                <input id="newSeat" maxlength="4" placeholder="12A" />
+              </label>
+              <button id="changeSeatBtn">Change Seat</button>
+              <button id="cancelBtn" class="danger">Cancel Booking</button>
+            </div>
+            <div id="manageResult" class="info-line"></div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <small>COMP214 Airline Team · Oracle 12c backend + single-page front end</small>
+      </footer>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>
