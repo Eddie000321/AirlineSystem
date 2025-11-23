@@ -1,4 +1,4 @@
--- Airline ticketing schema bootstrap script for Oracle 12c
+-- Airline ticketing schema bootstrap script for Oracle 12cㅡ
 -- Run as the schema owner (one time) to create all tables, constraints,
 -- sequences, PL/SQL objects and sample data.
 -- Sections:
