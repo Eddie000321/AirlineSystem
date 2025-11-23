@@ -1,4 +1,5 @@
 -- Basic smoke tests for the airline schema.
+-- Sections: flight availability, package booking demo, helpers, DML demo, audit check.
 SET SERVEROUTPUT ON;
 
 PROMPT Available flights YYZ → YVR today .. +30 days
@@ -76,3 +77,28 @@ BEGIN
   pkg_booking.pr_cancel_booking('&PNR');
 END;
 /
+
+PROMPT Booking total using fn_booking_total for seed booking (2000)
+SELECT fn_booking_total(2000) AS booking_total FROM dual;
+
+PROMPT Seat change demo via proc_change_seat (booking 2000 to seat 28D)
+BEGIN
+  proc_change_seat(2000, '28D');
+END;
+/
+
+-- Sequence-driven UPDATE to demonstrate seq_ticket usage in DML
+PROMPT Sequence-driven ticket renumber (booking 2000)
+BEGIN
+  UPDATE ticket
+  SET ticket_number = 'TK' || TO_CHAR(seq_ticket.NEXTVAL)
+  WHERE booking_id = 2000;
+  COMMIT;
+END;
+/
+
+PROMPT Ticket audit trail (latest 5)
+SELECT audit_id, ticket_id, action, seat_no, action_ts
+FROM ticket_audit
+ORDER BY audit_id DESC
+FETCH FIRST 5 ROWS ONLY;

@@ -1,6 +1,15 @@
 -- Airline ticketing schema bootstrap script for Oracle 12c
 -- Run as the schema owner (one time) to create all tables, constraints,
 -- sequences, PL/SQL objects and sample data.
+-- Sections:
+-- 1) Drop existing objects
+-- 2) Create tables
+-- 3) Create sequences
+-- 4) Create triggers
+-- 5) Create indexes
+-- 6) Seed data
+-- 7) PL/SQL helpers (functions/procedures/package)
+-- 8) Sequence-driven UPDATE demo + COMMIT
 
 SET DEFINE OFF;
 
@@ -143,6 +152,7 @@ CREATE TABLE ticket_audit (
 );
 
 PROMPT Creating sequences...
+-- PK/key generators for core tables
 
 CREATE SEQUENCE seq_customer START WITH 1000 NOCACHE;
 CREATE SEQUENCE seq_booking START WITH 2000 NOCACHE;
@@ -150,6 +160,7 @@ CREATE SEQUENCE seq_ticket START WITH 3000 NOCACHE;
 CREATE SEQUENCE seq_payment START WITH 4000 NOCACHE;
 
 PROMPT Creating triggers for PK defaults and audits...
+-- Default PK assignment + ticket audit trail on DML
 
 CREATE OR REPLACE TRIGGER trg_customer_pk
 BEFORE INSERT ON customer
@@ -218,6 +229,7 @@ CREATE INDEX idx_ticket_flight ON ticket(flight_id);
 CREATE INDEX idx_booking_customer ON booking(customer_id);
 
 PROMPT Sample master data...
+-- Airports/routes/aircraft + flights with dynamic seat layouts
 
 INSERT INTO airport(airport_code, name, city, country)
 VALUES ('YYZ', 'Toronto Pearson', 'Toronto', 'Canada');
@@ -282,6 +294,8 @@ END;
 
 PROMPT Generating seat layout per flight...
 
+PROMPT Creating tables...
+
 DECLARE
   v_labels CONSTANT VARCHAR2(9) := 'ABCDEFGHJ'; -- skip I
   PROCEDURE add_seat(p_flight NUMBER, p_row NUMBER, p_label CHAR, p_cabin VARCHAR2, p_exit CHAR := 'N', p_extra CHAR := 'N') IS
@@ -320,6 +334,7 @@ END;
 /
 
 PROMPT Loading sample passengers + bookings...
+-- Seed two bookings with tickets, then a small batch for today/tomorrow flights
 
 INSERT INTO customer(customer_id, full_name, contact_info)
 VALUES (seq_customer.NEXTVAL, 'Alice Park', 'alice@example.com');
@@ -373,9 +388,15 @@ BEGIN
 END;
 /
 
+PROMPT Using seq_ticket to update ticket_number for seed booking...
+UPDATE ticket
+SET ticket_number = 'TK' || TO_CHAR(seq_ticket.NEXTVAL)
+WHERE booking_id = 2000;
+
 COMMIT;
 
 PROMPT Creating helper functions & procedures...
+-- Business logic utilities (availability, totals, seat change, cancel)
 
 CREATE OR REPLACE FUNCTION fn_available_seats(p_flight_id NUMBER, p_cabin VARCHAR2)
 RETURN NUMBER
@@ -410,6 +431,13 @@ BEGIN
   FROM ticket
   WHERE booking_id = p_booking_id;
   RETURN NVL(v_total, 0);
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    RETURN 0;
+  WHEN OTHERS THEN
+    -- Defensive: unexpected issues return 0 but keep error traceable
+    DBMS_OUTPUT.PUT_LINE('fn_booking_total error: ' || SQLERRM);
+    RETURN 0;
 END;
 /
 
@@ -417,16 +445,24 @@ CREATE OR REPLACE PROCEDURE proc_change_seat(
   p_booking_id IN booking.booking_id%TYPE,
   p_seat_no    IN ticket.seat_no%TYPE
 ) IS
-  v_flight_id ticket.flight_id%TYPE;
+  CURSOR c_booking IS
+    SELECT * FROM booking
+    WHERE booking_id = p_booking_id
+    FOR UPDATE;
+  v_booking_row booking%ROWTYPE;
   v_taken NUMBER;
 BEGIN
-  SELECT flight_id INTO v_flight_id
-  FROM booking
-  WHERE booking_id = p_booking_id;
+  OPEN c_booking;
+  FETCH c_booking INTO v_booking_row;
+  IF c_booking%NOTFOUND THEN
+    CLOSE c_booking;
+    RAISE_APPLICATION_ERROR(-20012, 'Booking not found for seat change');
+  END IF;
+  CLOSE c_booking;
 
   SELECT COUNT(*) INTO v_taken
   FROM ticket
-  WHERE flight_id = v_flight_id
+  WHERE flight_id = v_booking_row.flight_id
     AND seat_no = p_seat_no
     AND status = 'ACTIVE';
 
@@ -437,20 +473,50 @@ BEGIN
   UPDATE ticket
   SET seat_no = p_seat_no
   WHERE booking_id = p_booking_id;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    RAISE_APPLICATION_ERROR(-20013, 'Booking not found (no_data_found)');
+  WHEN OTHERS THEN
+    RAISE;
 END;
 /
 
 CREATE OR REPLACE PROCEDURE proc_cancel_booking(p_pnr VARCHAR2) IS
+  CURSOR c_booking IS
+    SELECT booking_id
+    FROM booking
+    WHERE pnr_code = p_pnr
+    FOR UPDATE;
+  v_booking_id booking.booking_id%TYPE;
 BEGIN
-  UPDATE booking SET status = 'CANCELLED' WHERE pnr_code = p_pnr;
+  OPEN c_booking;
+  FETCH c_booking INTO v_booking_id;
+  IF c_booking%NOTFOUND THEN
+    CLOSE c_booking;
+    RAISE_APPLICATION_ERROR(-20014, 'PNR not found, cannot cancel');
+  END IF;
+  CLOSE c_booking;
+
+  UPDATE booking SET status = 'CANCELLED'
+  WHERE booking_id = v_booking_id;
+
   UPDATE ticket SET status = 'VOID'
-  WHERE booking_id = (SELECT booking_id FROM booking WHERE pnr_code = p_pnr);
+  WHERE booking_id = v_booking_id;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    RAISE_APPLICATION_ERROR(-20015, 'PNR not found (no_data_found)');
+  WHEN OTHERS THEN
+    RAISE;
 END;
 /
 
 PROMPT Building package with shared procedures/functions...
+-- pkg_booking wraps helpers and exposes booking create/cancel with PNR generator
 
 CREATE OR REPLACE PACKAGE pkg_booking AS
+  g_issue_channel CONSTANT VARCHAR2(20) := 'WEB_PORTAL';
+  SUBTYPE t_pnr_code IS booking.pnr_code%TYPE;
+
   TYPE t_ticket_summary IS RECORD (
     ticket_number ticket.ticket_number%TYPE,
     seat_no       ticket.seat_no%TYPE,
@@ -473,6 +539,15 @@ END pkg_booking;
 /
 
 CREATE OR REPLACE PACKAGE BODY pkg_booking AS
+  g_private_prefix CONSTANT VARCHAR2(6) := 'PNR-';
+  g_last_pnr booking.pnr_code%TYPE;
+
+  FUNCTION next_pnr(p_booking_id booking.booking_id%TYPE) RETURN booking.pnr_code%TYPE IS
+  BEGIN
+    g_last_pnr := g_private_prefix || TO_CHAR(p_booking_id);
+    RETURN g_last_pnr;
+  END;
+
   FUNCTION fx_available_seats(p_flight_id NUMBER, p_cabin VARCHAR2) RETURN NUMBER IS
   BEGIN
     RETURN fn_available_seats(p_flight_id, p_cabin);
@@ -495,6 +570,7 @@ CREATE OR REPLACE PACKAGE BODY pkg_booking AS
     v_booking_id booking.booking_id%TYPE;
     v_customer_id customer.customer_id%TYPE;
     v_taken NUMBER;
+    v_fare NUMBER;
   BEGIN
     SELECT COUNT(*) INTO v_taken
     FROM ticket
@@ -510,17 +586,20 @@ CREATE OR REPLACE PACKAGE BODY pkg_booking AS
     VALUES (seq_customer.NEXTVAL, p_customer_name, p_contact)
     RETURNING customer_id INTO v_customer_id;
 
-    o_pnr := DBMS_RANDOM.STRING('A', 3) || LPAD(TO_CHAR(DBMS_RANDOM.VALUE(0, 999)), 3, '0');
+    v_booking_id := seq_booking.NEXTVAL;
+    o_pnr := next_pnr(v_booking_id);
 
     INSERT INTO booking(booking_id, customer_id, flight_id, pnr_code, status, paid_flag)
-    VALUES (seq_booking.NEXTVAL, v_customer_id, p_flight_id, o_pnr, 'CONFIRMED', 'Y')
-    RETURNING booking_id INTO v_booking_id;
+    VALUES (v_booking_id, v_customer_id, p_flight_id, o_pnr, 'CONFIRMED', 'Y');
+
+    v_fare := CASE p_cabin WHEN 'ECONOMY' THEN 320 WHEN 'BUSINESS' THEN 980 ELSE 1600 END;
 
     INSERT INTO ticket(ticket_id, booking_id, flight_id, seat_no, cabin_class, fare_amount, status)
-    VALUES (seq_ticket.NEXTVAL, v_booking_id, p_flight_id, p_seat_no, p_cabin,
-      CASE p_cabin WHEN 'ECONOMY' THEN 320 WHEN 'BUSINESS' THEN 980 ELSE 1600 END,
-      'ACTIVE')
+    VALUES (seq_ticket.NEXTVAL, v_booking_id, p_flight_id, p_seat_no, p_cabin, v_fare, 'ACTIVE')
     RETURNING ticket_number, seat_no, cabin_class INTO o_ticket;
+  EXCEPTION
+    WHEN OTHERS THEN
+      RAISE;
   END;
 
   PROCEDURE pr_cancel_booking(p_pnr VARCHAR2) IS
