@@ -3,12 +3,30 @@ const { getConnection } = require('../db/pool');
 const { HttpError } = require('../utils/errorHandler');
 
 function generatePnr() {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 6; i += 1) {
-    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const nums = Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, '0');
+  let prefix = '';
+  for (let i = 0; i < 3; i += 1) {
+    prefix += letters[Math.floor(Math.random() * letters.length)];
   }
-  return code;
+  return `${prefix}${nums}`;
+}
+
+async function getSeatInfo(connection, flightId, seatNo) {
+  const result = await connection.execute(
+    `SELECT cabin_class
+     FROM seat_layout
+     WHERE flight_id = :flightId
+       AND seat_no = :seatNo`,
+    { flightId, seatNo },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  if (result.rows.length === 0) {
+    throw new HttpError(404, 'Seat not found for this flight');
+  }
+  return { cabin: result.rows[0].CABIN_CLASS };
 }
 
 async function getFareForCabin(connection, flightId, cabin) {
@@ -55,7 +73,8 @@ async function createBooking({ flightId, cabin, seatNo, passengerName, passenger
   try {
     await connection.execute('BEGIN NULL; END;'); // ensure session available
     await assertSeatAvailable(connection, flightId, seatNo);
-    const fareAmount = await getFareForCabin(connection, flightId, cabin);
+    const { cabin: seatCabin } = await getSeatInfo(connection, flightId, seatNo);
+    const fareAmount = await getFareForCabin(connection, flightId, seatCabin);
     const pnr = generatePnr();
 
     const customerResult = await connection.execute(
@@ -94,7 +113,7 @@ async function createBooking({ flightId, cabin, seatNo, passengerName, passenger
         bookingId,
         flightId,
         seatNo,
-        cabin,
+        cabin: seatCabin,
         fareAmount,
         ticketNumber: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 40 }
       },
@@ -106,7 +125,7 @@ async function createBooking({ flightId, cabin, seatNo, passengerName, passenger
     return {
       pnr,
       ticketNumber: ticketResult.outBinds.ticketNumber[0],
-      cabin,
+      cabin: seatCabin,
       seatNo,
       amount: fareAmount
     };
