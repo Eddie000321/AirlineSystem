@@ -21,8 +21,10 @@ Update `.env` with your Oracle server info (host/port/service/SID + credentials)
 | `src/services/` | Database access logic (queries / DML) |
 | `src/controllers/` | Input validation + response shaping |
 | `public/` | Front-end assets (HTML/CSS/JS) |
-| `sql/setup.sql` | All DDL/PLSQL/data for schema (tables, sequences, triggers, packages) |
-| `sql/tests.sql` | Example script to exercise package/functions |
+| `sql/assignment_ready.sql` | All DDL/PLSQL for schema (tables, sequences, triggers, packages) |
+| `sql/tests.sql` | Minimal, repeatable demo script (creates its own flight/seats/bookings) |
+| `sql/seed_manual.sql` | Deterministic manual seed (no randomness/loops) for sample data |
+| `sql/seed_front_demo.sql` | Front-end aligned seed: YYZ↔YVR/YUL/LAX/JFK routes + 60 days of FD* flights with matching seat layouts |
 
 ## API overview
 
@@ -37,12 +39,12 @@ Update `.env` with your Oracle server info (host/port/service/SID + credentials)
 
 ## Database artifacts
 
-- Tables: airport, aircraft, route, flight, seat_layout, customer, booking, ticket, payment, ticket_audit
-- Sequences: `seq_customer`, `seq_booking`, `seq_ticket`, `seq_payment`
+- Tables: airport, aircraft, route, flight, seat_layout, customer, booking, ticket, ticket_audit
+- Sequences: `seq_customer`, `seq_booking`, `seq_ticket`
 - Indexes: `idx_flight_route_time`, `idx_ticket_flight`, `idx_booking_customer`
 - Triggers: automatic PK assignment + ticket audit trail
 - Functions: `fn_available_seats`, `fn_booking_total`
-- Procedures: `proc_change_seat`, `proc_cancel_booking`
+- Procedures: `proc_change_seat` (ticket-level seat change), `proc_cancel_booking`
 - Package: `pkg_booking` (wraps create/cancel helpers and uses the functions)
 
-Run `@sql/setup.sql` then `@sql/tests.sql` from SQL*Plus/SQL Developer to populate seed data and verify compiled objects.
+Run `@sql/assignment_ready.sql` then `@sql/tests.sql` from SQL*Plus/SQL Developer to create the schema and exercise the helpers. Seed data is intentionally omitted; the tests script creates a minimal flight + seats for demonstration. For the UI demo, run `@sql/seed_front_demo.sql` to preload YYZ↔YVR/YUL/LAX/JFK flights (60 days) with seat layouts that match the front-end map.

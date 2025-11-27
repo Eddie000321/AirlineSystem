@@ -1,15 +1,14 @@
 -- Airline ticketing schema bootstrap script for Oracle 12c
 -- Run as the schema owner (one time) to create all tables, constraints,
--- sequences, PL/SQL objects and sample data.
+-- sequences, and PL/SQL objects. Seed data is intentionally omitted.
 -- Sections:
 -- 1) Drop existing objects
 -- 2) Create tables
 -- 3) Create sequences
 -- 4) Create triggers
 -- 5) Create indexes
--- 6) Seed data
+-- 6) Seed data (omitted; add your own)
 -- 7) PL/SQL helpers (functions/procedures/package)
--- 8) Sequence-driven UPDATE demo + COMMIT
 
 SET DEFINE OFF;
 
@@ -121,12 +120,13 @@ CREATE TABLE booking (
   booking_id    NUMBER PRIMARY KEY,
   customer_id   NUMBER NOT NULL REFERENCES customer(customer_id),
   flight_id     NUMBER NOT NULL REFERENCES flight(flight_id),
-  pnr_code      VARCHAR2(6) NOT NULL UNIQUE,
+  pnr_code      VARCHAR2(6) NOT NULL,
   status        VARCHAR2(20) DEFAULT 'CONFIRMED',
   created_at    TIMESTAMP DEFAULT SYSTIMESTAMP,
   paid_flag     CHAR(1) DEFAULT 'N',
   CONSTRAINT ck_booking_status CHECK (status IN ('CONFIRMED','CANCELLED')),
-  CONSTRAINT ck_booking_paid CHECK (paid_flag IN ('Y','N'))
+  CONSTRAINT ck_booking_paid CHECK (paid_flag IN ('Y','N')),
+  CONSTRAINT uq_booking_pnr UNIQUE (pnr_code)
 );
 
 CREATE TABLE ticket (
@@ -163,6 +163,10 @@ ALTER TABLE ticket
 ALTER TABLE ticket
   ADD CONSTRAINT fk_ticket_seat
   FOREIGN KEY (flight_id, seat_no) REFERENCES seat_layout(flight_id, seat_no);
+
+ALTER TABLE ticket_audit
+  ADD CONSTRAINT fk_ticket_audit_ticket
+  FOREIGN KEY (ticket_id) REFERENCES ticket(ticket_id) ON DELETE CASCADE;
 
 PROMPT Creating sequences...
 -- PK/key generators for core tables
@@ -206,7 +210,7 @@ END;
 /
 
 CREATE OR REPLACE TRIGGER trg_ticket_audit
-AFTER INSERT OR UPDATE OR DELETE ON ticket
+AFTER INSERT OR UPDATE ON ticket
 FOR EACH ROW
 DECLARE
   v_action VARCHAR2(20);
@@ -215,16 +219,13 @@ BEGIN
   IF INSERTING THEN
     v_action := 'INSERT';
     v_seat := :NEW.seat_no;
-  ELSIF UPDATING THEN
+  ELSE
     v_action := 'UPDATE';
     v_seat := :NEW.seat_no;
-  ELSE
-    v_action := 'DELETE';
-    v_seat := :OLD.seat_no;
   END IF;
 
   INSERT INTO ticket_audit(ticket_id, action, seat_no)
-  VALUES (NVL(:NEW.ticket_id, :OLD.ticket_id), v_action, v_seat);
+  VALUES (:NEW.ticket_id, v_action, v_seat);
 END;
 /
 
@@ -259,172 +260,7 @@ CREATE UNIQUE INDEX uq_ticket_active_seat ON ticket (
   CASE WHEN status = 'ACTIVE' THEN seat_no END
 );
 
-PROMPT Sample master data...
--- Airports/routes/aircraft + flights with dynamic seat layouts
-
-INSERT INTO airport(airport_code, name, city, country)
-VALUES ('YYZ', 'Toronto Pearson', 'Toronto', 'Canada');
-INSERT INTO airport(airport_code, name, city, country)
-VALUES ('YVR', 'Vancouver Intl', 'Vancouver', 'Canada');
-INSERT INTO airport(airport_code, name, city, country)
-VALUES ('YUL', 'Montreal Trudeau', 'Montreal', 'Canada');
-INSERT INTO airport(airport_code, name, city, country)
-VALUES ('LAX', 'Los Angeles Intl', 'Los Angeles', 'USA');
-INSERT INTO airport(airport_code, name, city, country)
-VALUES ('JFK', 'John F. Kennedy', 'New York', 'USA');
-
-INSERT INTO aircraft(model, tail_number, total_seats)
-VALUES ('Boeing 787-9', 'C-ABC1', 290);
-
-INSERT INTO route(departure_airport_id, arrival_airport_id, distance_km, economy_fare, business_fare, first_fare)
-SELECT dep.airport_id, arr.airport_id, 3358, 320, 980, 1600
-FROM airport dep, airport arr
-WHERE dep.airport_code = 'YYZ' AND arr.airport_code = 'YVR';
-
-INSERT INTO route(departure_airport_id, arrival_airport_id, distance_km, economy_fare, business_fare, first_fare)
-SELECT dep.airport_id, arr.airport_id, 500, 180, 620, 950
-FROM airport dep, airport arr
-WHERE dep.airport_code = 'YYZ' AND arr.airport_code = 'YUL';
-
-INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-VALUES (1, 'AC101', TO_TIMESTAMP('2024-05-21 08:30', 'YYYY-MM-DD HH24:MI'), TO_TIMESTAMP('2024-05-21 10:45', 'YYYY-MM-DD HH24:MI'), 1, 'SCHEDULED');
-
-INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-VALUES (1, 'AC105', TO_TIMESTAMP('2024-05-21 16:00', 'YYYY-MM-DD HH24:MI'), TO_TIMESTAMP('2024-05-21 18:15', 'YYYY-MM-DD HH24:MI'), 1, 'SCHEDULED');
-
-INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-VALUES (2, 'AC410', TO_TIMESTAMP('2024-05-21 09:30', 'YYYY-MM-DD HH24:MI'), TO_TIMESTAMP('2024-05-21 10:42', 'YYYY-MM-DD HH24:MI'), 1, 'SCHEDULED');
-
-PROMPT Adding dynamic-dated YYZ -> YVR flights for today through +30 days (2 per day)...
-
-DECLARE
-  v_base TIMESTAMP := CAST(TRUNC(SYSDATE) AS TIMESTAMP);
-  v_day  PLS_INTEGER;
-BEGIN
-  FOR v_day IN 0 .. 30 LOOP
-    -- Morning departure
-    INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-    VALUES (1,
-            'AC2' || TO_CHAR(v_day, 'FM00') || 'M',
-            v_base + v_day + (8/24),
-            v_base + v_day + (10.5/24),
-            1,
-            'SCHEDULED');
-
-    -- Afternoon departure
-    INSERT INTO flight(route_id, flight_number, departure_ts, arrival_ts, aircraft_id, status)
-    VALUES (1,
-            'AC2' || TO_CHAR(v_day, 'FM00') || 'A',
-            v_base + v_day + (15/24),
-            v_base + v_day + (17.5/24),
-            1,
-            'SCHEDULED');
-  END LOOP;
-END;
-/
-
-PROMPT Generating seat layout per flight...
-
-PROMPT Creating tables...
-
-DECLARE
-  v_labels CONSTANT VARCHAR2(9) := 'ABCDEFGHJ'; -- skip I
-  PROCEDURE add_seat(p_flight NUMBER, p_row NUMBER, p_label CHAR, p_cabin VARCHAR2, p_exit CHAR := 'N', p_extra CHAR := 'N') IS
-  BEGIN
-    INSERT INTO seat_layout(flight_id, cabin_class, seat_row, seat_col, seat_no, is_exit_row, is_extra_legroom)
-    VALUES (p_flight, p_cabin, p_row, p_label, TO_CHAR(p_row) || p_label, p_exit, p_extra);
-  END;
-BEGIN
-  FOR rec IN (SELECT flight_id FROM flight) LOOP
-    -- Business cabin rows 7-16 seats A-D-G-J (2-2-2)
-    FOR row_num IN 7 .. 16 LOOP
-      add_seat(rec.flight_id, row_num, 'A', 'BUSINESS');
-      add_seat(rec.flight_id, row_num, 'D', 'BUSINESS');
-      add_seat(rec.flight_id, row_num, 'G', 'BUSINESS');
-      add_seat(rec.flight_id, row_num, 'J', 'BUSINESS');
-    END LOOP;
-
-    -- Economy cabin rows 28-36 seats ABC-DEF-GHJ
-    FOR row_num IN 28 .. 36 LOOP
-      FOR seat_idx IN 1 .. LENGTH(v_labels) LOOP
-        add_seat(rec.flight_id, row_num, SUBSTR(v_labels, seat_idx, 1), 'ECONOMY',
-          CASE WHEN row_num IN (28, 36) THEN 'Y' ELSE 'N' END,
-          CASE WHEN row_num IN (28, 29) THEN 'Y' ELSE 'N' END);
-      END LOOP;
-    END LOOP;
-
-    -- First cabin rows 1-4 seat H style
-    FOR row_num IN 1 .. 4 LOOP
-      add_seat(rec.flight_id, row_num, 'A', 'FIRST');
-      add_seat(rec.flight_id, row_num, 'D', 'FIRST');
-      add_seat(rec.flight_id, row_num, 'G', 'FIRST');
-      add_seat(rec.flight_id, row_num, 'J', 'FIRST');
-    END LOOP;
-  END LOOP;
-END;
-/
-
-PROMPT Loading sample passengers + bookings...
--- Seed two bookings with tickets, then a small batch for today/tomorrow flights
-
-INSERT INTO customer(customer_id, full_name, contact_info)
-VALUES (seq_customer.NEXTVAL, 'Alice Park', 'alice@example.com');
-
-INSERT INTO customer(customer_id, full_name, contact_info)
-VALUES (seq_customer.NEXTVAL, 'Brian Lee', 'brian@example.com');
-
-INSERT INTO booking(booking_id, customer_id, flight_id, pnr_code, status, paid_flag)
-VALUES (seq_booking.NEXTVAL, 1000, 1, 'A1B2C3', 'CONFIRMED', 'Y');
-
-INSERT INTO ticket(ticket_id, booking_id, flight_id, seat_no, cabin_class, fare_amount, status)
-VALUES (seq_ticket.NEXTVAL, 2000, 1, '28A', 'ECONOMY', 320, 'ACTIVE');
-
-PROMPT Additional sample bookings for today/tomorrow flights...
-DECLARE
-  PROCEDURE add_booking(p_name VARCHAR2, p_contact VARCHAR2, p_flight_id NUMBER, p_seat VARCHAR2, p_cabin VARCHAR2, p_fare NUMBER) IS
-    v_pnr booking.pnr_code%TYPE;
-  BEGIN
-    v_pnr := DBMS_RANDOM.STRING('A', 3) || LPAD(TO_CHAR(DBMS_RANDOM.VALUE(0, 999)), 3, '0');
-
-    INSERT INTO customer(customer_id, full_name, contact_info)
-    VALUES (seq_customer.NEXTVAL, p_name, p_contact);
-
-    INSERT INTO booking(booking_id, customer_id, flight_id, pnr_code, status, paid_flag)
-    VALUES (seq_booking.NEXTVAL, seq_customer.CURRVAL, p_flight_id, v_pnr, 'CONFIRMED', 'Y');
-
-    INSERT INTO ticket(ticket_id, booking_id, flight_id, seat_no, cabin_class, fare_amount, status)
-    VALUES (seq_ticket.NEXTVAL, seq_booking.CURRVAL, p_flight_id, p_seat, p_cabin, p_fare, 'ACTIVE');
-  END;
-BEGIN
-  -- Use actual flight IDs based on insertion order: first 3 static, then dynamic block (today/tomorrow)
-  -- Assuming dynamic YYZ-YVR flights got IDs 4,5,6 and YYZ-YUL 7,8 respectively.
-  -- earliest two YYZ->YVR flights (today)
-  add_booking('Today Demo Econ', 'today@demo.com',
-    (SELECT flight_id FROM (SELECT flight_id FROM flight WHERE route_id = 1 ORDER BY departure_ts) WHERE ROWNUM = 1),
-    '28B', 'ECONOMY', 320);
-
-  add_booking('Today Demo Biz', 'biz@demo.com',
-    (SELECT flight_id FROM (SELECT flight_id FROM flight WHERE route_id = 1 ORDER BY departure_ts) WHERE ROWNUM = 1),
-    '7A', 'BUSINESS', 980);
-
-  -- first afternoon YYZ->YVR flight today
-  add_booking('Today Demo First', 'first@demo.com',
-    (SELECT flight_id FROM (SELECT flight_id FROM flight WHERE route_id = 1 AND TO_CHAR(departure_ts, 'HH24') >= '12' ORDER BY departure_ts) WHERE ROWNUM = 1),
-    '1A', 'FIRST', 1600);
-
-  -- first YYZ->YVR flight tomorrow
-  add_booking('Tomorrow Demo Econ', 'tomorrow@demo.com',
-    (SELECT flight_id FROM (SELECT flight_id FROM flight WHERE route_id = 1 AND TRUNC(departure_ts) = TRUNC(SYSDATE) + 1 ORDER BY departure_ts) WHERE ROWNUM = 1),
-    '28C', 'ECONOMY', 320);
-END;
-/
-
-PROMPT Using seq_ticket to update ticket_number for seed booking...
-UPDATE ticket
-SET ticket_number = 'TK' || TO_CHAR(seq_ticket.NEXTVAL)
-WHERE booking_id = 2000;
-
-COMMIT;
+PROMPT Seed data skipped (populate your own demo data as needed).
 
 PROMPT Creating helper functions & procedures...
 -- Business logic utilities (availability, totals, seat change, cancel)
@@ -465,37 +301,37 @@ BEGIN
 EXCEPTION
   WHEN NO_DATA_FOUND THEN
     RETURN 0;
-  WHEN OTHERS THEN
-    -- Defensive: unexpected issues return 0 but keep error traceable
-    DBMS_OUTPUT.PUT_LINE('fn_booking_total error: ' || SQLERRM);
-    RETURN 0;
 END;
 /
 
 CREATE OR REPLACE PROCEDURE proc_change_seat(
-  p_booking_id IN booking.booking_id%TYPE,
+  p_ticket_id  IN ticket.ticket_id%TYPE,
   p_seat_no    IN ticket.seat_no%TYPE
 ) IS
-  CURSOR c_booking IS
-    SELECT * FROM booking
-    WHERE booking_id = p_booking_id
-    FOR UPDATE;
-  v_booking_row booking%ROWTYPE;
+  v_ticket_row ticket%ROWTYPE;
   v_taken NUMBER;
+  v_seat_exists NUMBER;
 BEGIN
-  OPEN c_booking;
-  FETCH c_booking INTO v_booking_row;
-  IF c_booking%NOTFOUND THEN
-    CLOSE c_booking;
-    RAISE_APPLICATION_ERROR(-20012, 'Booking not found for seat change');
+  SELECT * INTO v_ticket_row
+  FROM ticket
+  WHERE ticket_id = p_ticket_id
+  FOR UPDATE;
+
+  SELECT COUNT(*) INTO v_seat_exists
+  FROM seat_layout
+  WHERE flight_id = v_ticket_row.flight_id
+    AND seat_no = p_seat_no;
+
+  IF v_seat_exists = 0 THEN
+    RAISE_APPLICATION_ERROR(-20021, 'Seat does not exist for flight');
   END IF;
-  CLOSE c_booking;
 
   SELECT COUNT(*) INTO v_taken
   FROM ticket
-  WHERE flight_id = v_booking_row.flight_id
+  WHERE flight_id = v_ticket_row.flight_id
     AND seat_no = p_seat_no
-    AND status = 'ACTIVE';
+    AND status = 'ACTIVE'
+    AND ticket_id <> p_ticket_id;
 
   IF v_taken > 0 THEN
     RAISE_APPLICATION_ERROR(-20010, 'Seat already taken');
@@ -503,11 +339,11 @@ BEGIN
 
   UPDATE ticket
   SET seat_no = p_seat_no
-  WHERE booking_id = p_booking_id;
+  WHERE ticket_id = p_ticket_id;
   -- status remains as-is; audit trigger will log the change
 EXCEPTION
   WHEN NO_DATA_FOUND THEN
-    RAISE_APPLICATION_ERROR(-20013, 'Booking not found (no_data_found)');
+    RAISE_APPLICATION_ERROR(-20013, 'Ticket not found for seat change');
   WHEN OTHERS THEN
     RAISE;
 END;
@@ -574,10 +410,23 @@ CREATE OR REPLACE PACKAGE BODY pkg_booking AS
   g_last_pnr booking.pnr_code%TYPE;
 
   FUNCTION next_pnr RETURN booking.pnr_code%TYPE IS
+    v_candidate booking.pnr_code%TYPE;
+    v_exists NUMBER;
   BEGIN
-    -- 6-character PNR: 3 random letters + 3 digits
-    g_last_pnr := DBMS_RANDOM.STRING('A', 3) || LPAD(TRUNC(DBMS_RANDOM.VALUE(0, 1000)), 3, '0');
-    RETURN g_last_pnr;
+    FOR attempt IN 1 .. 20 LOOP
+      v_candidate := DBMS_RANDOM.STRING('A', 3) || LPAD(TRUNC(DBMS_RANDOM.VALUE(0, 1000)), 3, '0');
+
+      SELECT COUNT(*) INTO v_exists
+      FROM booking
+      WHERE pnr_code = v_candidate;
+
+      IF v_exists = 0 THEN
+        g_last_pnr := v_candidate;
+        RETURN g_last_pnr;
+      END IF;
+    END LOOP;
+
+    RAISE_APPLICATION_ERROR(-20031, 'Unable to generate unique PNR after retries');
   END;
 
   FUNCTION fx_available_seats(p_flight_id NUMBER, p_cabin VARCHAR2) RETURN NUMBER IS
@@ -602,6 +451,9 @@ CREATE OR REPLACE PACKAGE BODY pkg_booking AS
     v_customer_id customer.customer_id%TYPE;
     v_taken NUMBER;
     v_fare NUMBER;
+    v_econ route.economy_fare%TYPE;
+    v_biz route.business_fare%TYPE;
+    v_first route.first_fare%TYPE;
     v_cabin seat_layout.cabin_class%TYPE;
   BEGIN
     SELECT COUNT(*) INTO v_taken
@@ -619,21 +471,42 @@ CREATE OR REPLACE PACKAGE BODY pkg_booking AS
     WHERE flight_id = p_flight_id
       AND seat_no = p_seat_no;
 
+    SELECT r.economy_fare, r.business_fare, r.first_fare
+    INTO v_econ, v_biz, v_first
+    FROM route r
+    JOIN flight f ON f.route_id = r.route_id
+    WHERE f.flight_id = p_flight_id;
+
+    v_fare := CASE v_cabin WHEN 'ECONOMY' THEN v_econ WHEN 'BUSINESS' THEN v_biz ELSE v_first END;
+
     INSERT INTO customer(customer_id, full_name, contact_info)
     VALUES (seq_customer.NEXTVAL, p_customer_name, p_contact)
     RETURNING customer_id INTO v_customer_id;
 
-    v_booking_id := seq_booking.NEXTVAL;
-    o_pnr := next_pnr;
+    FOR attempt IN 1 .. 20 LOOP
+      v_booking_id := seq_booking.NEXTVAL;
+      o_pnr := next_pnr;
 
-    INSERT INTO booking(booking_id, customer_id, flight_id, pnr_code, status, paid_flag)
-    VALUES (v_booking_id, v_customer_id, p_flight_id, o_pnr, 'CONFIRMED', 'Y');
+      BEGIN
+        INSERT INTO booking(booking_id, customer_id, flight_id, pnr_code, status, paid_flag)
+        VALUES (v_booking_id, v_customer_id, p_flight_id, o_pnr, 'CONFIRMED', 'Y');
 
-    v_fare := CASE v_cabin WHEN 'ECONOMY' THEN 320 WHEN 'BUSINESS' THEN 980 ELSE 1600 END;
+        INSERT INTO ticket(ticket_id, booking_id, flight_id, seat_no, cabin_class, fare_amount, status)
+        VALUES (seq_ticket.NEXTVAL, v_booking_id, p_flight_id, p_seat_no, v_cabin, v_fare, 'ACTIVE')
+        RETURNING ticket_number, seat_no, cabin_class INTO o_ticket;
 
-    INSERT INTO ticket(ticket_id, booking_id, flight_id, seat_no, cabin_class, fare_amount, status)
-    VALUES (seq_ticket.NEXTVAL, v_booking_id, p_flight_id, p_seat_no, v_cabin, v_fare, 'ACTIVE')
-    RETURNING ticket_number, seat_no, cabin_class INTO o_ticket;
+        RETURN;
+      EXCEPTION
+        WHEN dup_val_on_index THEN
+          IF INSTR(SQLERRM, 'UQ_BOOKING_PNR') > 0 THEN
+            IF attempt = 20 THEN
+              RAISE_APPLICATION_ERROR(-20030, 'Unable to allocate unique PNR');
+            END IF;
+          ELSE
+            RAISE;
+          END IF;
+      END;
+    END LOOP;
   EXCEPTION
     WHEN OTHERS THEN
       RAISE;
